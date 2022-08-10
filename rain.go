@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image/color"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -13,24 +12,6 @@ import (
 
 var charset = "@#$%&?ABCDEF0123456789"
 
-//lint:ignore U1000 awesome way to pa
-func colorstr(s string) (c color.RGBA, err error) {
-	c.A = 0xff
-	switch len(s) {
-	case 7:
-		_, err = fmt.Sscanf(s, "#%02x%02x%02x", &c.R, &c.G, &c.B)
-	case 4:
-		_, err = fmt.Sscanf(s, "#%1x%1x%1x", &c.R, &c.G, &c.B)
-		// Double the hex digits:
-		c.R *= 17
-		c.G *= 17
-		c.B *= 17
-	default:
-		err = fmt.Errorf("invalid length, must be 7 or 4")
-
-	}
-	return
-}
 func s(format string, args ...interface{}) string {
 	return fmt.Sprintf(format, args...)
 }
@@ -102,12 +83,16 @@ func main() {
 					glyphs[idx] = g
 					lck.Unlock()
 					cursor_to_position(uint(x), uint(y))
-					fmt.Printf("%s", s("\x1b[38;2;%d;%d;%dm%s", 0, g.v, 0, g.r))
-					time.Sleep(1 * time.Microsecond)
+					r, b := 0, 0
+					if g.v > 250 {
+						r, b = g.v-50, g.v-50
+					}
+					fmt.Printf("%s", s("\x1b[38;2;%d;%d;%dm%s", r, g.v, b, g.r))
+					time.Sleep(100 * time.Nanosecond) // give the tty a little time to catch up to us.
 				}
 				cursor_to_position(0, uint(y))
 			}
-			time.Sleep(16 * time.Millisecond)
+			time.Sleep(16 * time.Millisecond) // 1000ms / 60fps = 16.666666
 		}
 	}()
 	wg.Add(1)
@@ -115,6 +100,7 @@ func main() {
 		for {
 			go func() {
 				x := rand.Intn(w)
+				s := rand.Intn(250) + 50
 				for y := 0; y < h; y++ {
 					r := rand.Intn(charset_len)
 					lck.Lock()
@@ -124,57 +110,11 @@ func main() {
 					g.v = 255
 					glyphs[idx] = g
 					lck.Unlock()
-					time.Sleep(35 * time.Millisecond)
+					time.Sleep(time.Duration(s) * time.Millisecond) // look like it's struggling...
 				}
 			}()
-			time.Sleep(105 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) // don't spawn too many too fast...
 		}
 	}()
 	wg.Wait()
-	/* for {
-		go func() {
-			x := rand.Intn(w)
-			speed := rand.Intn(50) + 50
-			for y := 0; y < h; y++ {
-				idx := x + (y * w)
-				if idx >= len(glyphs) {
-					continue
-				}
-				g := glyphs[x+(y*w)]
-				g.color.R = 255
-				g.color.B = 255
-				g.color.G = 255
-				r := rand.Intn(len(charset))
-				g.r = charset[r : r+1]
-				cursor_to_position(uint(x), uint(y))
-				fmt.Printf("\b%s%s", prep(g.color), g.r)
-				go func(g Glyph, x, y, w int) {
-					g.color.R = 0
-					g.color.B = 0
-					for {
-						g.color.G = g.color.G - 1
-						if rand.Intn(40) == 40 {
-							r := rand.Intn(len(charset))
-							g.r = charset[r : r+1]
-						}
-						cursor_to_position(uint(x), uint(y))
-						fmt.Printf("\b%s%s", prep(g.color), g.r)
-						time.Sleep(100 * time.Millisecond)
-						if g.color.G == 0 {
-							break
-						}
-					}
-					g.color.R = 0
-					g.color.G = 0
-					g.color.B = 0
-					//glyphs[x+(y*w)] = &g
-
-				}(*g, x, y, w)
-				time.Sleep(time.Duration(speed) * time.Millisecond)
-			}
-		}()
-
-		time.Sleep(360 * time.Millisecond)
-	} */
-
 }
